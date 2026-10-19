@@ -78,7 +78,7 @@ sudo apt install ./multiseat-manager_1.1.0_all.deb
 ### Option B — Install script  *(from source)*
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/SeatSplit.git
+git clone https://github.com/hyphen04/SeatSplit.git
 cd SeatSplit
 sudo ./packaging/install.sh
 ```
@@ -92,7 +92,7 @@ sudo ./packaging/install.sh --uninstall
 ### Option C — Run directly  *(no install)*
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/SeatSplit.git
+git clone https://github.com/hyphen04/SeatSplit.git
 cd SeatSplit
 sudo python3 multiseat_manager.py
 ```
