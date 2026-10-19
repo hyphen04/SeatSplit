@@ -29,7 +29,7 @@ refresh_caches() {
 
 # ---- Uninstall ----
 if [ "$1" = "--uninstall" ]; then
-    rm -rf "$APP"
+    rm -rf "$APP" /opt/multiseat-manager
     rm -f /usr/local/bin/seatsplit \
           /usr/share/applications/seatsplit.desktop \
           /usr/share/icons/hicolor/scalable/apps/seatsplit.svg
@@ -39,12 +39,7 @@ if [ "$1" = "--uninstall" ]; then
 fi
 
 # ---- Check Python/GTK dependency ----
-python3 - <<'EOF' || {
-    echo ""
-    echo "ERROR: PyGObject (python3-gi) is not installed."
-    echo "Fix with: sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 policykit-1"
-    exit 1
-}
+python3 - <<'EOF' || { echo "ERROR: PyGObject (python3-gi) is not installed. Fix with: sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 policykit-1"; exit 1; }
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk

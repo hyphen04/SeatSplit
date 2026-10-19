@@ -28,6 +28,9 @@ under the hood — SeatSplit gives you a friendly drag-and-drop UI on top of it.
 - 🔍 **Guided device detection** — press a key / click a mouse to identify which
   device belongs to which seat
 - ⚡ **Live, no reboot** — changes are applied through `loginctl` + `udevadm`
+- 🔄 **Live updates** — hardware and logins are rescanned every 2 seconds
+- 🟢 **Seat state** — applied seats are highlighted green, edited seats amber,
+  with a per-seat **Reset** button
 - 🌙 **Dark & light themes** — toggle in the header bar; choice is remembered
 - 🧪 **Demo mode** — try the full UI without any real hardware (`--demo`)
 - 📦 **Tiny footprint** — single Python file, zero PyPI dependencies
@@ -72,7 +75,7 @@ standard on any systemd-based distro.
 Download the latest `.deb` from the [Releases](../../releases) page and install:
 
 ```bash
-sudo apt install ./seatsplit_1.1.0_all.deb
+sudo apt install ./seatsplit_1.3.0_all.deb
 ```
 
 ### Option B — Install script  *(from source)*
@@ -217,6 +220,12 @@ python3 seatsplit.py --demo
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the full internal architecture
 reference, data model, and guide on adding new features.
+
+---
+
+## Author
+
+Kunj Patel — [kunj.dev](https://www.kunj.dev/) · [GitHub](https://github.com/hyphen04)
 
 ---
 

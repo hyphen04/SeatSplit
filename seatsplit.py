@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""SeatSplit — split one Linux PC into several independent seats.
+"""SeatSplit - a small GTK3 app to split one Linux PC into several seats.
 
 Drag device cards (graphics card, keyboard, mouse) between seats, then press Apply.
-Works live through systemd-logind, no reboot. Up to 8 seats supported.
+Works live through systemd-logind, no reboot. Any number of seats (up to 8).
 
 Needs only python3-gi (GTK 3) and polkit (pkexec) - both are on most desktops:
     sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 policykit-1
@@ -25,8 +25,12 @@ except Exception:  # noqa: BLE001
 
 APP_NAME = "SeatSplit"
 APP_ID = "seatsplit"
+AUTHOR = "Kunj Patel"
+WEBSITE = "https://www.kunj.dev/"
+GITHUB = "https://github.com/hyphen04"
 MAIN = "seat0"          # shown as "Seat 1"
 MAX_SEATS = 8
+LIVE_MS = 2000          # how often to rescan hardware and logins in the background
 GREETER_USERS = {"lightdm", "gdm", "sddm", "Debian-gdm"}
 DM_SERVICES = ["lightdm", "gdm3", "gdm", "sddm"]
 DEMO = "--demo" in sys.argv
@@ -167,11 +171,28 @@ def build_groups(devs):
 
 
 def sessions_by_seat():
+    """{seat: [(user, state)]} for live sessions only.
+
+    state is "active" (the one on screen), "online" (logged in but switched away) or
+    "opening". Sessions that are closing/lingering are ignored, which is what made
+    stale users show up as logged in.
+    """
     out = defaultdict(list)
     for line in sh("loginctl", "list-sessions", "--no-legend").splitlines():
         p = line.split()
-        if len(p) >= 4:
-            out[p[3]].append(p[2])
+        if not p:
+            continue
+        info = {}
+        for kv in sh("loginctl", "show-session", p[0], "-p", "Name", "-p", "Seat",
+                     "-p", "State", "-p", "Remote").splitlines():
+            k, _, v = kv.partition("=")
+            info[k] = v
+        seat, state = info.get("Seat", ""), info.get("State", "")
+        if not seat or seat == "-" or info.get("Remote") == "yes":
+            continue
+        if state in ("closing", ""):
+            continue
+        out[seat].append((info.get("Name", p[2] if len(p) > 2 else "?"), state))
     return out
 
 
@@ -211,9 +232,9 @@ def demo_scan():
             dev("Razer Basilisk Mouse", "mouse", "1-6", 4),
             dev("Dell KB216 Keyboard", "keyboard", "1-7", 5),
             dev("Microsoft Basic Mouse", "mouse", "1-8", 6)]
-    sess = {MAIN: ["alice"]}
+    sess = {MAIN: [("alice", "active")]}
     for s in set(_demo_seats.values()):
-        sess[s] = ["user" + s[4:]]
+        sess[s] = [("user" + s[4:], "active")]
     return gpus, devs, sess
 
 
@@ -365,6 +386,11 @@ def plan_suggestion(items, seats, max_seats=MAX_SEATS):
     return out, created
 
 
+def scan_sig(res):
+    gpus, devs, sess = res
+    return json.dumps([gpus, devs, {k: sess[k] for k in sorted(sess)}], sort_keys=True, default=str)
+
+
 def reload_udev():
     run("udevadm", "control", "--reload")
     run("udevadm", "trigger", "--action=change", "--subsystem-match=drm",
@@ -480,12 +506,12 @@ LIGHT = dict(bg="#f4f5f8", card="#ffffff", border="#e3e6ee", text="#1a1d27", dim
              accent="#4f5bd5", accenth="#424ec0", accentbg="#eef0ff", onaccent="#ffffff",
              chip="#f8f9fc", hover="#eceef5", warn="#b45309", ok="#15803d", danger="#c62828",
              gpubg="#efe9ff", gpufg="#5b3fd0", kbbg="#e6f0ff", kbfg="#1f5fbf",
-             msbg="#e3f6f1", msfg="#0f7a63", lockbg="#eceef4", warnbg="#fdf0dd")
+             msbg="#e3f6f1", msfg="#0f7a63", lockbg="#eceef4", warnbg="#fdf0dd", okbg="#e1f5e8")
 DARK = dict(bg="#0f1116", card="#171a22", border="#272c3a", text="#e9ebf2", dim="#8b92a7",
             accent="#7b8bff", accenth="#93a0ff", accentbg="#1c2036", onaccent="#0f1116",
             chip="#1c202b", hover="#232838", warn="#f0a35c", ok="#4ade80", danger="#e5484d",
             gpubg="#2a2250", gpufg="#b7a6ff", kbbg="#18294a", kbfg="#8db6ff",
-            msbg="#12332d", msfg="#6fe0c3", lockbg="#242938", warnbg="#3a2c18")
+            msbg="#12332d", msfg="#6fe0c3", lockbg="#242938", warnbg="#3a2c18", okbg="#12301f")
 
 CSS = Template("""
 window { background: $bg; color: $text; }
@@ -498,7 +524,13 @@ headerbar button.suggest { background-color: $accentbg; color: $accent; font-wei
 headerbar button.suggest:hover { background-color: $hover; color: $accenth; }
 scrolledwindow, viewport { background: transparent; }
 .hint { color: $dim; font-size: 13px; }
+.footer, .footer label { color: $dim; font-size: 12px; }
+button.footer-link { background: none; border: none; box-shadow: none; padding: 0 2px; min-height: 0; min-width: 0; }
+button.footer-link label { color: $accent; font-size: 12px; }
+button.footer-link:hover label { color: $accenth; text-decoration: underline; }
 .seat { background: $card; border: 1px solid $border; border-radius: 14px; }
+.seat.applied { border-color: $ok; box-shadow: inset 0 3px 0 $ok; }
+.seat.modified { border-color: $warn; box-shadow: inset 0 3px 0 $warn; }
 .seat.hover { border-color: $accent; background: $accentbg; }
 .seat-title { font-size: 17px; font-weight: 700; color: $text; }
 .seat-sub { color: $dim; font-size: 12px; }
@@ -522,6 +554,7 @@ scrolledwindow, viewport { background: transparent; }
 .badge-mouse { background: $msbg; color: $msfg; }
 .badge-lock { background: $lockbg; color: $dim; }
 .badge-warn { background: $warnbg; color: $warn; }
+.badge-ok { background: $okbg; color: $ok; }
 .move { background-image: none; background-color: transparent; border: 1px solid $border; box-shadow: none;
         text-shadow: none; color: $dim; border-radius: 8px; padding: 3px 10px; min-height: 0; font-size: 12px; }
 .move:hover, .move:checked { background-color: $hover; color: $text; border-color: $accent; }
@@ -678,9 +711,14 @@ def make_chip(app, it):
             except Exception:  # noqa: BLE001
                 pass
             box.get_style_context().add_class("dragging")
+            app._dragging = True
+
+        def end(w, c):
+            box.get_style_context().remove_class("dragging")
+            app._dragging = False
 
         eb.connect("drag-begin", begin)
-        eb.connect("drag-end", lambda w, c: box.get_style_context().remove_class("dragging"))
+        eb.connect("drag-end", end)
     else:
         eb.set_tooltip_text("Built-in device. It always stays on Seat 1.")
     return eb
@@ -702,7 +740,15 @@ class Column:
         row = hbox(8)
         row.pack_start(lbl(seat_name(seat), "seat-title"), False, False, 0)
         row.pack_start(lbl("main" if seat == MAIN else seat, "seat-sub"), False, False, 0)
+        self.state = lbl("", "badge")
+        self.state.set_no_show_all(True)
+        self.state.set_valign(Gtk.Align.CENTER)
+        row.pack_start(self.state, False, False, 0)
         acts = hbox(6)
+        self.reset_btn = button("↺ Reset", "mini", lambda _b: app.reset_seat(seat),
+                                "Undo your changes and go back to what is applied now")
+        self.reset_btn.set_no_show_all(True)
+        acts.pack_start(self.reset_btn, False, False, 0)
         self.remove_btn = None
         if seat != MAIN:
             self.detect_btn = button("Detect devices", "mini", lambda _b: app.start_detect(seat),
@@ -765,6 +811,25 @@ class Column:
         ctx.add_class(kind)
         self.status.set_text(text)
 
+    def set_state(self, applied, modified):
+        """applied: seat is live right now. modified: the on-screen layout differs from it."""
+        ctx = self.box.get_style_context()
+        for c in ("applied", "modified"):
+            ctx.remove_class(c)
+        bctx = self.state.get_style_context()
+        for c in ("badge-ok", "badge-warn"):
+            bctx.remove_class(c)
+        if modified:
+            ctx.add_class("modified")
+            bctx.add_class("badge-warn")
+            self.state.set_text("MODIFIED" if applied else "NOT APPLIED")
+        elif applied:
+            ctx.add_class("applied")
+            bctx.add_class("badge-ok")
+            self.state.set_text("APPLIED")
+        self.state.set_visible(applied or modified)
+        self.reset_btn.set_visible(modified)
+
     def set_removable(self, yes):
         if self.remove_btn:
             self.remove_btn.set_visible(yes)
@@ -782,6 +847,7 @@ class App(Gtk.Window):
         self.items, self.sessions = [], {}
         self.seats, self.extra, self.cols = [MAIN, "seat1"], set(), {}
         self._toast_id = 0
+        self._sig, self._dragging, self._live_busy = None, False, False
 
         self.cfg = load_cfg()
         theme = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--theme=")), None)
@@ -795,6 +861,7 @@ class App(Gtk.Window):
         self.build_body()
         self.show_all()
         self.refresh()
+        GLib.timeout_add(LIVE_MS, self.live_tick)
 
     # ---------------------------------------------------- theme
     def apply_theme(self):
@@ -891,6 +958,18 @@ class App(Gtk.Window):
         bar.pack_end(self.reset_btn, False, False, 0)
         self.bar_rev.add(bar)
         main.pack_start(self.bar_rev, False, False, 0)
+
+        # credits footer
+        foot = hbox(4)
+        foot.set_halign(Gtk.Align.CENTER)
+        foot.pack_start(lbl("Made by " + AUTHOR + "  ·", "footer"), False, False, 0)
+        for text, url in (("Website", WEBSITE), ("GitHub", GITHUB)):
+            link = Gtk.LinkButton.new_with_label(url, text)
+            link.set_relief(Gtk.ReliefStyle.NONE)
+            link.set_tooltip_text(url)
+            link.get_style_context().add_class("footer-link")
+            foot.pack_start(link, False, False, 0)
+        main.pack_end(foot, False, False, 0)
 
         # guided detection panel (floats in the middle)
         self.det_rev = Gtk.Revealer()
@@ -999,7 +1078,42 @@ class App(Gtk.Window):
         gpus, devs, sess = res
         self.items = build_items(gpus, devs)
         self.sessions = dict(sess)
+        self._sig = scan_sig(res)
         self.render()
+
+    # ---------------------------------------------------- live updates
+    def live_tick(self):
+        """Every few seconds: rescan quietly, redraw only if something changed."""
+        if self.busy or self.det or self._dragging or self._live_busy:
+            return True
+        self._live_busy = True
+
+        def work():
+            try:
+                res = scan_all()
+            except Exception:  # noqa: BLE001
+                res = None
+            GLib.idle_add(self.live_apply, res)
+        threading.Thread(target=work, daemon=True).start()
+        return True
+
+    def live_apply(self, res):
+        self._live_busy = False
+        if res is None or self.busy or self.det or self._dragging:
+            return False
+        sig = scan_sig(res)
+        if sig == self._sig:
+            return False
+        self._sig = sig
+        gpus, devs, sess = res
+        pending = {i["id"]: i["seat"] for i in self.items if i["seat"] != i["orig"]}
+        self.items = build_items(gpus, devs)
+        for i in self.items:          # keep the user's unapplied drag-and-drop choices
+            if i["id"] in pending and not i["locked"] and pending[i["id"]] != i["orig"]:
+                i["seat"] = pending[i["id"]]
+        self.sessions = dict(sess)
+        self.render()
+        return False
 
     def sync_seats(self):
         used = {MAIN, "seat1"} | self.extra
@@ -1034,9 +1148,14 @@ class App(Gtk.Window):
             mine = sorted((i for i in self.items if i["seat"] == s), key=sort_key)
             col.fill(mine, self.placeholder(s))
             col.summary.set_text(summary_text(mine))
-            users = [u for u in self.sessions.get(s, []) if u not in GREETER_USERS]
-            if users:
-                col.set_status("on", ", ".join(users) + " is logged in")
+            sess = [(u, st) for u, st in self.sessions.get(s, []) if u not in GREETER_USERS]
+            front = [u for u, st in sess if st == "active"] or [u for u, st in sess[:1]]
+            back = [u for u, _ in sess if u not in front]
+            if front:
+                txt = ", ".join(front) + " is logged in"
+                if back:
+                    txt += " (+" + ", ".join(back) + " switched away)"
+                col.set_status("on", txt)
             elif self.sessions.get(s):
                 col.set_status("wait", "Login screen")
             elif not any(i["orig"] == s for i in self.items):
@@ -1045,6 +1164,9 @@ class App(Gtk.Window):
                 col.set_status("off", "Nobody logged in")
             empty = not any(i["orig"] == s or i["seat"] == s for i in self.items)
             col.set_removable(empty and s not in (MAIN, "seat1"))
+            live = {i["id"] for i in self.items if i["orig"] == s}
+            now = {i["id"] for i in mine}
+            col.set_state(s != MAIN and bool(live), live != now)
         self.add_btn.set_sensitive(len(self.seats) < MAX_SEATS)
         self.update_bar()
 
@@ -1085,6 +1207,13 @@ class App(Gtk.Window):
     def reset(self):
         for it in self.items:
             it["seat"] = it["orig"]
+        self.render()
+
+    def reset_seat(self, seat):
+        """Undo unapplied changes that touch this seat (devices return to where they are now)."""
+        for it in self.items:
+            if it["orig"] == seat or it["seat"] == seat:
+                it["seat"] = it["orig"]
         self.render()
 
     def suggest(self):
