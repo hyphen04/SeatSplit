@@ -1,17 +1,17 @@
-# Developer Reference — SeatSplit / Multiseat Manager
+# Developer Reference — SeatSplit / SeatSplit
 
-This document explains the internal design of `multiseat_manager.py` for
+This document explains the internal design of `seatsplit.py` for
 developers who want to understand, extend, or debug the codebase.
 
 ---
 
 ## Architecture overview
 
-The entire application is a **single Python file** (`multiseat_manager.py`).
+The entire application is a **single Python file** (`seatsplit.py`).
 It is split into four logical sections separated by `# =====` banners:
 
 ```
-multiseat_manager.py
+seatsplit.py
 ├── Backend          (hardware scanning, udev/loginctl wrappers)
 ├── Model            (item/seat data model, plan generation, validation)
 ├── Look             (CSS theme constants, GTK widget helpers)
@@ -144,7 +144,7 @@ The CSS template string (`CSS`) uses `string.Template` substitution. Calling
 `apply_theme()` loads the substituted CSS into a single `Gtk.CssProvider`
 attached to the default screen.
 
-Theme preference is persisted to `~/.config/multiseat-manager/config.json`.
+Theme preference is persisted to `~/.config/seatsplit/config.json`.
 
 ---
 
@@ -171,9 +171,9 @@ flag prevents overlapping operations.
 
 | File | Purpose |
 |---|---|
-| `multiseat_manager.py` | Entire application (backend + GTK3 UI) |
-| `assets/multiseat-manager.desktop` | XDG desktop entry (app launcher) |
-| `assets/multiseat-manager.svg` | Application icon |
+| `seatsplit.py` | Entire application (backend + GTK3 UI) |
+| `assets/seatsplit.desktop` | XDG desktop entry (app launcher) |
+| `assets/seatsplit.svg` | Application icon |
 | `packaging/install.sh` | Direct install / uninstall script |
 | `packaging/build-deb.sh` | Builds a `.deb` package (accepts optional `VERSION` arg) |
 | `.github/workflows/release.yml` | GitHub Actions: auto-build & publish `.deb` on tag push |

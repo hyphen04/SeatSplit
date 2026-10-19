@@ -8,7 +8,7 @@ dist/
 build/
 .eggs/
 
-# Built packages — rebuild with build-deb.sh, don't commit binaries
+# Built packages — rebuild with packaging/build-deb.sh, don't commit binaries
 *.deb
 
 # Editor / IDE

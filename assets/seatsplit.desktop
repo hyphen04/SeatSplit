@@ -1,12 +1,12 @@
 [Desktop Entry]
 Version=1.1
 Type=Application
-Name=Multiseat Manager
+Name=SeatSplit
 GenericName=Multiseat Manager
 Comment=Split one PC into several seats with drag and drop
-Exec=multiseat-manager
-Icon=multiseat-manager
+Exec=seatsplit
+Icon=seatsplit
 Terminal=false
 Categories=System;Settings;HardwareSettings;
-Keywords=multiseat;seat;gpu;keyboard;mouse;split;
-StartupWMClass=multiseat-manager
+Keywords=seatsplit;multiseat;seat;gpu;keyboard;mouse;split;
+StartupWMClass=seatsplit

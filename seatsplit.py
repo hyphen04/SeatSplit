@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Multiseat Manager - a small GTK3 app to split one Linux PC into several seats.
+"""SeatSplit — split one Linux PC into several independent seats.
 
 Drag device cards (graphics card, keyboard, mouse) between seats, then press Apply.
-Works live through systemd-logind, no reboot. Any number of seats (up to 8).
+Works live through systemd-logind, no reboot. Up to 8 seats supported.
 
 Needs only python3-gi (GTK 3) and polkit (pkexec) - both are on most desktops:
     sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 policykit-1
@@ -23,8 +23,8 @@ try:
 except Exception:  # noqa: BLE001
     cairo = None
 
-APP_NAME = "Multiseat Manager"
-APP_ID = "multiseat-manager"
+APP_NAME = "SeatSplit"
+APP_ID = "seatsplit"
 MAIN = "seat0"          # shown as "Seat 1"
 MAX_SEATS = 8
 GREETER_USERS = {"lightdm", "gdm", "sddm", "Debian-gdm"}
@@ -600,7 +600,7 @@ def margins(w, a=0, b=None, c=None, d=None):
     w.set_margin_start(left)
 
 
-TARGET = Gtk.TargetEntry.new("application/x-multiseat-card", Gtk.TargetFlags.SAME_APP, 0)
+TARGET = Gtk.TargetEntry.new("application/x-seatsplit-card", Gtk.TargetFlags.SAME_APP, 0)
 
 
 def move_control(app, it):

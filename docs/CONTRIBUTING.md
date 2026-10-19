@@ -13,8 +13,8 @@ and single-file, so the bar to entry is low.
 
 3. **Pull requests**:
    - Fork the repo and create a feature branch (`git checkout -b my-fix`).
-   - Make your changes to `multiseat_manager.py` (and the scripts if needed).
-   - Test manually: `python3 multiseat_manager.py --demo` should run without
+   - Make your changes to `seatsplit.py` (and the scripts if needed).
+   - Test manually: `python3 seatsplit.py --demo` should run without
      errors and the new behaviour should work as expected.
    - Keep commits small and descriptive.
    - Open the PR against `main`.
@@ -36,7 +36,7 @@ loginctl calls) you will need a real Linux machine with multiple GPUs.
 ## Running in demo mode (no hardware needed)
 
 ```bash
-python3 multiseat_manager.py --demo
+python3 seatsplit.py --demo
 ```
 
 This starts the app with fake GPUs, keyboards, and mice so you can test all UI

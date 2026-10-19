@@ -1,4 +1,4 @@
-# SeatSplit — Multiseat Manager
+# SeatSplit — SeatSplit
 
 > **Split one Linux PC into several independent seats with drag-and-drop.**  
 > Each seat gets its own GPU, keyboard, mouse and a separate login session — live, no reboot.
@@ -72,7 +72,7 @@ standard on any systemd-based distro.
 Download the latest `.deb` from the [Releases](../../releases) page and install:
 
 ```bash
-sudo apt install ./multiseat-manager_1.1.0_all.deb
+sudo apt install ./seatsplit_1.1.0_all.deb
 ```
 
 ### Option B — Install script  *(from source)*
@@ -94,7 +94,7 @@ sudo ./packaging/install.sh --uninstall
 ```bash
 git clone https://github.com/hyphen04/SeatSplit.git
 cd SeatSplit
-sudo python3 multiseat_manager.py
+sudo python3 seatsplit.py
 ```
 
 > [!NOTE]
@@ -107,13 +107,13 @@ sudo python3 multiseat_manager.py
 
 ### Launch
 
-After installing, search for **"Multiseat Manager"** in your application menu,
+After installing, search for **"SeatSplit"** in your application menu,
 or run from a terminal:
 
 ```bash
-multiseat-manager                # normal (auto-elevates via pkexec)
-multiseat-manager --demo         # demo mode — fake hardware, nothing is changed
-multiseat-manager --theme=dark   # start in dark theme
+seatsplit                # normal (auto-elevates via pkexec)
+seatsplit --demo         # demo mode — fake hardware, nothing is changed
+seatsplit --theme=dark   # start in dark theme
 ```
 
 ### Workflow
@@ -158,7 +158,7 @@ multiseat-manager --theme=dark   # start in dark theme
 | Extra seat shows a blank screen | Use *Tools → Fix blank login screen (lightdm)*, then restart the login screen |
 | `ImportError: cannot import name 'Gtk'` | PyGObject system package missing — see [Prerequisites](#prerequisites) |
 | Changes not visible after Apply | Click *Refresh*, check the status dot, or use *Tools → Restart login screen* |
-| "Administrator access needed" error | Check `systemctl status polkit`; try `sudo python3 multiseat_manager.py` |
+| "Administrator access needed" error | Check `systemctl status polkit`; try `sudo python3 seatsplit.py` |
 
 ---
 
@@ -186,10 +186,10 @@ See [`.github/workflows/release.yml`](.github/workflows/release.yml).
 
 ```
 SeatSplit/
-├── multiseat_manager.py          # Entire application (backend + GTK3 UI)
+├── seatsplit.py          # Entire application (backend + GTK3 UI)
 ├── assets/
-│   ├── multiseat-manager.desktop # XDG desktop entry (app launcher)
-│   └── multiseat-manager.svg     # Application icon
+│   ├── seatsplit.desktop # XDG desktop entry (app launcher)
+│   └── seatsplit.svg     # Application icon
 ├── packaging/
 │   ├── install.sh                # Direct install / uninstall script
 │   └── build-deb.sh              # Builds a .deb package
@@ -212,7 +212,7 @@ Contributions are welcome! Please read [docs/CONTRIBUTING.md](docs/CONTRIBUTING.
 Quick start — no installation needed:
 
 ```bash
-python3 multiseat_manager.py --demo
+python3 seatsplit.py --demo
 ```
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the full internal architecture

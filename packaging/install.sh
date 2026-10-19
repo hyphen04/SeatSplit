@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install (or remove) Multiseat Manager directly onto this machine.
+# Install (or remove) SeatSplit directly onto this machine.
 #
 # Usage:
 #   sudo ./packaging/install.sh              # install
@@ -17,7 +17,7 @@ fi
 # Resolve repo root (one level above this script)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-APP=/opt/multiseat-manager
+APP=/opt/seatsplit
 
 # Helper: refresh desktop + icon caches
 refresh_caches() {
@@ -30,11 +30,11 @@ refresh_caches() {
 # ---- Uninstall ----
 if [ "$1" = "--uninstall" ]; then
     rm -rf "$APP"
-    rm -f /usr/local/bin/multiseat-manager \
-          /usr/share/applications/multiseat-manager.desktop \
-          /usr/share/icons/hicolor/scalable/apps/multiseat-manager.svg
+    rm -f /usr/local/bin/seatsplit \
+          /usr/share/applications/seatsplit.desktop \
+          /usr/share/icons/hicolor/scalable/apps/seatsplit.svg
     refresh_caches
-    echo "Multiseat Manager removed."
+    echo "SeatSplit removed."
     exit 0
 fi
 
@@ -52,14 +52,14 @@ EOF
 
 # ---- Install ----
 install -d "$APP"
-install -m 755 "$ROOT_DIR/multiseat_manager.py" "$APP/multiseat_manager.py"
-ln -sf "$APP/multiseat_manager.py" /usr/local/bin/multiseat-manager
-install -D -m 644 "$ROOT_DIR/assets/multiseat-manager.desktop" \
-    /usr/share/applications/multiseat-manager.desktop
-install -D -m 644 "$ROOT_DIR/assets/multiseat-manager.svg" \
-    /usr/share/icons/hicolor/scalable/apps/multiseat-manager.svg
+install -m 755 "$ROOT_DIR/seatsplit.py" "$APP/seatsplit.py"
+ln -sf "$APP/seatsplit.py" /usr/local/bin/seatsplit
+install -D -m 644 "$ROOT_DIR/assets/seatsplit.desktop" \
+    /usr/share/applications/seatsplit.desktop
+install -D -m 644 "$ROOT_DIR/assets/seatsplit.svg" \
+    /usr/share/icons/hicolor/scalable/apps/seatsplit.svg
 refresh_caches
 
 echo ""
-echo "Multiseat Manager installed."
-echo "Open 'Multiseat Manager' from your app menu, or run: multiseat-manager"
+echo "SeatSplit installed."
+echo "Open 'SeatSplit' from your app menu, or run: seatsplit"

@@ -1,0 +1,12 @@
+# Force LF line endings for all shell scripts and source files
+# so they work correctly on Linux regardless of where git is checked out from.
+*.sh        text eol=lf
+*.py        text eol=lf
+*.desktop   text eol=lf
+*.yml       text eol=lf
+*.md        text eol=lf
+*.svg       text eol=lf
+*.json      text eol=lf
+
+# Treat .deb as binary
+*.deb       binary
