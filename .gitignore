@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Built packages — rebuild with build-deb.sh, don't commit binaries
+*.deb
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# User config (written at runtime)
+*.json
+
+# Temp
+*.tmp
+*.bak
+
