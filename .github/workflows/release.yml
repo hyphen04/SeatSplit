@@ -3,10 +3,11 @@
 # Triggers when you push a version tag: git tag v1.2.0 && git push --tags
 #
 # What it does:
-#   1. Checks out the repo.
-#   2. Installs dpkg-deb (already on Ubuntu runners).
-#   3. Runs packaging/build-deb.sh with the tag version.
-#   4. Creates a GitHub Release and uploads seatsplit_<VERSION>_all.deb as an asset.
+#   1. Checks out the full git history.
+#   2. Extracts commit messages since the previous tag for the changelog.
+#   3. Runs packaging/build-deb.sh to build the .deb.
+#   4. Creates a GitHub Release with changelog + install instructions,
+#      and uploads seatsplit_<VERSION>_all.deb as an asset.
 #
 # Versioning convention:
 #   Tag format:  vMAJOR.MINOR.PATCH   (e.g. v1.2.0)
@@ -28,12 +29,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (full history for changelog)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # need full history to compare tags
 
       - name: Extract version from tag
         id: ver
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog from commits since last tag
+        id: changelog
+        run: |
+          # Find the previous tag (the one before this one)
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${GITHUB_REF_NAME}$" | head -n1)
+
+          if [ -z "$PREV_TAG" ]; then
+            # First ever release — list all commits
+            LOG=$(git log --pretty=format:"- %s" HEAD)
+          else
+            LOG=$(git log --pretty=format:"- %s" "${PREV_TAG}..HEAD")
+          fi
+
+          # Write to output (multiline safe)
+          {
+            echo "log<<EOF"
+            echo "$LOG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build .deb
         run: |
@@ -44,8 +67,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "SeatSplit ${{ github.ref_name }}"
-          generate_release_notes: true   # auto-fills "What's new" from commits
           body: |
+            ## What's new
+            ${{ steps.changelog.outputs.log }}
+
+            ---
+
             ## Install
 
             ### Debian / Ubuntu / Linux Mint (.deb)
