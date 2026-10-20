@@ -29,7 +29,7 @@ APP_ID = "seatsplit"
 AUTHOR = "Kunj Patel"
 WEBSITE = "https://www.kunj.dev/"
 GITHUB = "https://github.com/hyphen04"
-VERSION = "1.3.5"       # build-deb.sh stamps this from the release tag
+VERSION = "1.3.6"       # build-deb.sh stamps this from the release tag
 REPO = "hyphen04/SeatSplit"
 RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
@@ -584,6 +584,23 @@ def save_cfg(cfg):
         pass
 
 
+def open_url(url):
+    """Open a link in the logged-in user's browser (this app runs as root, which can't)."""
+    u = real_user()
+    env = ["env"] + [f"{k}={os.environ[k]}" for k in ("DISPLAY", "XAUTHORITY", "WAYLAND_DISPLAY") if k in os.environ]
+    if u and os.geteuid() == 0:
+        rt = f"/run/user/{u.pw_uid}"
+        cmd = (["runuser", "-u", u.pw_name, "--"] + env +
+               [f"XDG_RUNTIME_DIR={rt}", f"DBUS_SESSION_BUS_ADDRESS=unix:path={rt}/bus", "xdg-open", url])
+    else:
+        cmd = ["xdg-open", url]
+    try:
+        subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except OSError:
+        return False
+
+
 # ============================================================ look
 LIGHT = dict(bg="#f4f5f8", card="#ffffff", border="#e3e6ee", text="#1a1d27", dim="#6a7186",
              accent="#4f5bd5", accenth="#424ec0", accentbg="#eef0ff", onaccent="#ffffff",
@@ -985,7 +1002,7 @@ class App(Gtk.Window):
             if self.confirm(f"SeatSplit v{ver} is available",
                             f"This copy was not installed from the .deb package, so it cannot update itself.\n"
                             f"Open the download page?"):
-                Gtk.show_uri_on_window(self, page, Gdk.CURRENT_TIME)
+                open_url(page)
             return
         if not self.confirm(f"Update SeatSplit to v{ver}?",
                             f"You are on v{VERSION}. The new package is downloaded from GitHub, "
@@ -1156,6 +1173,7 @@ class App(Gtk.Window):
             link = Gtk.LinkButton.new_with_label(url, text)
             link.set_relief(Gtk.ReliefStyle.NONE)
             link.set_tooltip_text(url)
+            link.connect("activate-link", lambda _w, u=url: open_url(u) or False)
             link.get_style_context().add_class("footer-link")
             foot.pack_start(link, False, False, 0)
         main.pack_end(foot, False, False, 0)
