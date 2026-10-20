@@ -29,11 +29,12 @@ APP_ID = "seatsplit"
 AUTHOR = "Kunj Patel"
 WEBSITE = "https://www.kunj.dev/"
 GITHUB = "https://github.com/hyphen04"
-VERSION = "1.3.7"       # build-deb.sh stamps this from the release tag
+VERSION = "1.3.8"       # build-deb.sh stamps this from the release tag
 REPO = "hyphen04/SeatSplit"
 RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
 UPDATE_CHECK_MS = 6 * 3600 * 1000
+DESKTOP_ENV = ("XDG_CURRENT_DESKTOP", "DESKTOP_SESSION", "XDG_SESSION_TYPE", "XDG_DATA_DIRS", "XDG_CONFIG_DIRS")
 MAIN = "seat0"          # shown as "Seat 1"
 MAX_SEATS = 8
 LIVE_MS = 2000          # how often to rescan hardware and logins in the background
@@ -587,18 +588,23 @@ def save_cfg(cfg):
 def open_url(url):
     """Open a link in the logged-in user's browser (this app runs as root, which can't)."""
     u = real_user()
-    env = ["env"] + [f"{k}={os.environ[k]}" for k in ("DISPLAY", "XAUTHORITY", "WAYLAND_DISPLAY") if k in os.environ]
-    if u and os.geteuid() == 0:
+    root = u and os.geteuid() == 0
+    if root:
         rt = f"/run/user/{u.pw_uid}"
-        # pkexec leaves HOME=/root; a browser started with that cannot open the user's profile
-        cmd = (["runuser", "-u", u.pw_name, "--"] + env +
-               [f"HOME={u.pw_dir}", f"USER={u.pw_name}", f"LOGNAME={u.pw_name}",
-                f"XDG_RUNTIME_DIR={rt}", f"DBUS_SESSION_BUS_ADDRESS=unix:path={rt}/bus", "xdg-open", url])
+        # clean environment of the real user: pkexec leaves HOME=/root and drops the desktop variables
+        env = {"HOME": u.pw_dir, "USER": u.pw_name, "LOGNAME": u.pw_name,
+               "PATH": "/usr/local/bin:/usr/bin:/bin", "XDG_RUNTIME_DIR": rt,
+               "DBUS_SESSION_BUS_ADDRESS": f"unix:path={rt}/bus",
+               "XAUTHORITY": os.environ.get("XAUTHORITY") or os.path.join(u.pw_dir, ".Xauthority")}
+        for k in ("DISPLAY", "WAYLAND_DISPLAY", *DESKTOP_ENV):
+            if k in os.environ:
+                env[k] = os.environ[k]
+        cmd = ["runuser", "-u", u.pw_name, "--", "env", "-i"] + [f"{k}={v}" for k, v in env.items()] + ["xdg-open", url]
     else:
         cmd = ["xdg-open", url]
     try:
-        subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         cwd=u.pw_dir if u and os.geteuid() == 0 else None)
+        log = open("/tmp/seatsplit-open.log", "w")  # kept for troubleshooting
+        subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=log, stderr=log, cwd=u.pw_dir if root else None)
         return True
     except OSError:
         return False
@@ -1676,7 +1682,7 @@ class App(Gtk.Window):
 # ============================================================ entry
 def elevate():
     """Re-launch as root through pkexec (or sudo), keeping the display variables."""
-    keep = ["DISPLAY", "XAUTHORITY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR"]
+    keep = ["DISPLAY", "XAUTHORITY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", *DESKTOP_ENV]
     env = [f"{k}={os.environ[k]}" for k in keep if k in os.environ]
     if "XAUTHORITY" not in os.environ:
         env.append("XAUTHORITY=" + os.path.expanduser("~/.Xauthority"))

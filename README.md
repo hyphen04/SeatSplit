@@ -78,7 +78,7 @@ standard on any systemd-based distro.
 Download the latest `.deb` from the [Releases](../../releases) page and install:
 
 ```bash
-sudo apt install ./seatsplit_1.3.7_all.deb
+sudo apt install ./seatsplit_1.3.8_all.deb
 ```
 
 ### Option B — Install script  *(from source)*
