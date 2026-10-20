@@ -29,7 +29,7 @@ APP_ID = "seatsplit"
 AUTHOR = "Kunj Patel"
 WEBSITE = "https://www.kunj.dev/"
 GITHUB = "https://github.com/hyphen04"
-VERSION = "1.3.8"       # build-deb.sh stamps this from the release tag
+VERSION = "1.3.9"       # build-deb.sh stamps this from the release tag
 REPO = "hyphen04/SeatSplit"
 RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
@@ -585,6 +585,25 @@ def save_cfg(cfg):
         pass
 
 
+def session_env(uid):
+    """Desktop variables (XDG_CURRENT_DESKTOP...) taken from one of the user's own running processes."""
+    want = {}
+    try:
+        for pid in os.listdir("/proc"):
+            if not pid.isdigit() or os.stat(f"/proc/{pid}").st_uid != uid:
+                continue
+            try:
+                data = open(f"/proc/{pid}/environ", "rb").read().split(b"\0")
+            except OSError:
+                continue
+            found = dict(kv.decode(errors="replace").split("=", 1) for kv in data if b"=" in kv)
+            if "XDG_CURRENT_DESKTOP" in found:
+                return {k: found[k] for k in DESKTOP_ENV + ("DISPLAY", "XAUTHORITY") if k in found}
+    except OSError:
+        pass
+    return want
+
+
 def open_url(url):
     """Open a link in the logged-in user's browser (this app runs as root, which can't)."""
     u = real_user()
@@ -593,12 +612,14 @@ def open_url(url):
         rt = f"/run/user/{u.pw_uid}"
         # clean environment of the real user: pkexec leaves HOME=/root and drops the desktop variables
         env = {"HOME": u.pw_dir, "USER": u.pw_name, "LOGNAME": u.pw_name,
-               "PATH": "/usr/local/bin:/usr/bin:/bin", "XDG_RUNTIME_DIR": rt,
+               "PATH": "/usr/local/bin:/usr/bin:/bin:/snap/bin:/usr/local/games:/usr/games", "XDG_RUNTIME_DIR": rt,
                "DBUS_SESSION_BUS_ADDRESS": f"unix:path={rt}/bus",
                "XAUTHORITY": os.environ.get("XAUTHORITY") or os.path.join(u.pw_dir, ".Xauthority")}
         for k in ("DISPLAY", "WAYLAND_DISPLAY", *DESKTOP_ENV):
             if k in os.environ:
                 env[k] = os.environ[k]
+        for k, v in session_env(u.pw_uid).items():   # fills in anything pkexec stripped
+            env.setdefault(k, v)
         cmd = ["runuser", "-u", u.pw_name, "--", "env", "-i"] + [f"{k}={v}" for k, v in env.items()] + ["xdg-open", url]
     else:
         cmd = ["xdg-open", url]
