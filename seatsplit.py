@@ -29,7 +29,7 @@ APP_ID = "seatsplit"
 AUTHOR = "Kunj Patel"
 WEBSITE = "https://www.kunj.dev/"
 GITHUB = "https://github.com/hyphen04"
-VERSION = "1.3.4"       # build-deb.sh stamps this from the release tag
+VERSION = "1.3.5"       # build-deb.sh stamps this from the release tag
 REPO = "hyphen04/SeatSplit"
 RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
@@ -68,7 +68,7 @@ def check_update():
 def can_self_update():
     """Only a .deb install (under /opt/seatsplit) can be upgraded in place."""
     return (not DEMO and os.geteuid() == 0 and shutil.which("dpkg")
-            and os.path.abspath(__file__).startswith("/opt/seatsplit/"))
+            and os.path.realpath(__file__).startswith("/opt/seatsplit/"))
 
 
 def install_update(url, sha256, progress=lambda frac, text: None):
