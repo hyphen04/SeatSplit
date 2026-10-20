@@ -29,7 +29,7 @@ APP_ID = "seatsplit"
 AUTHOR = "Kunj Patel"
 WEBSITE = "https://www.kunj.dev/"
 GITHUB = "https://github.com/hyphen04"
-VERSION = "1.3.2"       # build-deb.sh stamps this from the release tag
+VERSION = "1.3.3"       # build-deb.sh stamps this from the release tag
 REPO = "hyphen04/SeatSplit"
 RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
@@ -71,26 +71,42 @@ def can_self_update():
             and os.path.abspath(__file__).startswith("/opt/seatsplit/"))
 
 
-def install_update(url, sha256):
-    """Download the .deb from GitHub, verify it, install it. Returns (ok, message)."""
+def install_update(url, sha256, progress=lambda frac, text: None):
+    """Download the .deb from GitHub, verify it, install it. Returns (ok, message).
+
+    progress(fraction or None, text) is called along the way (from this thread).
+    """
     tmp = tempfile.mkdtemp(prefix="seatsplit-")
     try:
         deb = os.path.join(tmp, os.path.basename(url))
         req = urllib.request.Request(url, headers={"User-Agent": APP_ID + "/" + VERSION})
         h = hashlib.sha256()
+        progress(0.0, "Downloading...")
         with urllib.request.urlopen(req, timeout=60) as r, open(deb, "wb") as f:
+            total, got = int(r.headers.get("Content-Length") or 0), 0
             for chunk in iter(lambda: r.read(65536), b""):
                 h.update(chunk)
                 f.write(chunk)
+                got += len(chunk)
+                if total:
+                    progress(got / total, f"Downloading... {got * 100 // total}%")
+        progress(1.0, "Verifying download...")
         if sha256 and h.hexdigest() != sha256:
             return False, "Download is corrupted (checksum mismatch). Nothing was installed."
         os.chmod(tmp, 0o755)
         os.chmod(deb, 0o644)
-        tool = ["apt-get", "install", "-y", deb] if shutil.which("apt-get") else ["dpkg", "-i", deb]
-        p = subprocess.run(tool, capture_output=True, text=True,
-                           env=dict(os.environ, DEBIAN_FRONTEND="noninteractive"))
+        progress(None, "Installing... this can take a minute.")
+        tool = (["apt-get", "install", "-y", "-o", "Dpkg::Options::=--force-confold", deb]
+                if shutil.which("apt-get") else ["dpkg", "-i", deb])
+        env = dict(os.environ, DEBIAN_FRONTEND="noninteractive", NEEDRESTART_MODE="a")
+        try:
+            p = subprocess.run(tool, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                               env=env, timeout=600)
+        except subprocess.TimeoutExpired:
+            return False, "Installing timed out. Make sure no other package manager (apt, Software Updater) is running."
         if p.returncode != 0:
-            return False, (p.stderr.strip().splitlines() or ["install failed"])[-1]
+            tail = [l for l in (p.stderr + "\n" + p.stdout).splitlines() if l.strip()][-6:]
+            return False, "\n".join(tail) or "install failed"
         return True, "Updated."
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -975,18 +991,59 @@ class App(Gtk.Window):
                             f"You are on v{VERSION}. The new package is downloaded from GitHub, "
                             f"checked, installed, and SeatSplit restarts. Your seats are not changed."):
             return
-        self.notify("Downloading update...")
-        self.update_btn.set_sensitive(False)
+        if self.busy:
+            self.notify(f"Please wait, {self._busy_label} is still running.", True)
+            return
+        self.busy, self._busy_label = True, "the update"
 
-        def done(r):
-            self.update_btn.set_sensitive(True)
-            ok, msg = (False, str(r)) if isinstance(r, Exception) else r
+        # modal progress window so the user always sees what is happening
+        dlg = Gtk.Dialog(title="Updating SeatSplit", transient_for=self, modal=True)
+        dlg.set_deletable(False)
+        dlg.set_default_size(380, -1)
+        area = dlg.get_content_area()
+        margins(area, 18)
+        area.set_spacing(10)
+        status = lbl(f"Updating to v{ver}...", "hint")
+        bar = Gtk.ProgressBar()
+        area.pack_start(status, False, False, 0)
+        area.pack_start(bar, False, False, 0)
+        state = {"pulse": False}
+
+        def pulse():
+            if state["pulse"]:
+                bar.pulse()
+            return True
+        GLib.timeout_add(120, pulse)
+        dlg.show_all()
+
+        def progress(frac, text):
+            def ui():
+                state["pulse"] = frac is None
+                if frac is not None:
+                    bar.set_fraction(frac)
+                status.set_text(text)
+                return False
+            GLib.idle_add(ui)
+
+        def work():
+            try:
+                res = install_update(url, sha, progress)
+            except Exception as e:  # noqa: BLE001
+                res = (False, f"{type(e).__name__}: {e}")
+            GLib.idle_add(finish, res)
+
+        def finish(res):
+            self.busy, self._busy_label = False, "something"
+            state["pulse"] = False
+            dlg.destroy()
+            ok, msg = res
             if not ok:
                 self.error("Update failed", msg)
-                return
+                return False
             self.notify(f"Updated to v{ver}. Restarting...")
             GLib.timeout_add(1200, self.restart)
-        self.bg(lambda: install_update(url, sha), done)
+            return False
+        threading.Thread(target=work, daemon=True).start()
 
     def restart(self):
         os.execv(sys.executable, [sys.executable, os.path.abspath(__file__)] + sys.argv[1:])
