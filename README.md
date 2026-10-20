@@ -28,6 +28,8 @@ under the hood — SeatSplit gives you a friendly drag-and-drop UI on top of it.
 - 🔍 **Guided device detection** — press a key / click a mouse to identify which
   device belongs to which seat
 - ⚡ **Live, no reboot** — changes are applied through `loginctl` + `udevadm`
+- ⬇️ **In-app updates** — checks GitHub Releases and, for `.deb` installs, downloads,
+  verifies (SHA-256) and installs the new version in one click (Tools → Check for updates)
 - 🔄 **Live updates** — hardware and logins are rescanned every 2 seconds
 - 🟢 **Seat state** — applied seats are highlighted green, edited seats amber,
   with a per-seat **Reset** button
@@ -75,7 +77,7 @@ standard on any systemd-based distro.
 Download the latest `.deb` from the [Releases](../../releases) page and install:
 
 ```bash
-sudo apt install ./seatsplit_1.3.0_all.deb
+sudo apt install ./seatsplit_1.3.1_all.deb
 ```
 
 ### Option B — Install script  *(from source)*

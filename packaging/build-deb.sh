@@ -9,14 +9,14 @@
 # The .deb is written to the repo root.
 #
 # Install the result with:
-#   sudo apt install ./seatsplit_1.3.0_all.deb
+#   sudo apt install ./seatsplit_1.3.1_all.deb
 set -e
 
 # Resolve repo root (one level above this script)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-VER="${1:-1.3.0}"
+VER="${1:-1.3.1}"
 TMP="$(mktemp -d)"
 PKG="$TMP/seatsplit_${VER}_all"
 
@@ -25,6 +25,8 @@ echo "Building seatsplit version $VER ..."
 # --- Install application files ---
 install -D -m 755 "$ROOT_DIR/seatsplit.py" \
     "$PKG/opt/seatsplit/seatsplit.py"
+# Stamp the release version into the app so its update check knows what it is
+sed -i "s/^VERSION = .*/VERSION = \"$VER\"/" "$PKG/opt/seatsplit/seatsplit.py"
 install -d "$PKG/usr/bin"
 ln -s /opt/seatsplit/seatsplit.py "$PKG/usr/bin/seatsplit"
 

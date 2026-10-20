@@ -10,7 +10,8 @@ Needs only python3-gi (GTK 3) and polkit (pkexec) - both are on most desktops:
 Options:  --demo          fake hardware, nothing is changed (for trying the UI)
           --theme=dark    start in dark or light theme
 """
-import glob, json, os, pwd, re, shutil, struct, subprocess, sys, threading, time
+import glob, hashlib, json, os, pwd, re, shutil, struct, subprocess, sys, tempfile, threading, time
+import urllib.request
 from collections import defaultdict
 from string import Template
 
@@ -28,6 +29,11 @@ APP_ID = "seatsplit"
 AUTHOR = "Kunj Patel"
 WEBSITE = "https://www.kunj.dev/"
 GITHUB = "https://github.com/hyphen04"
+VERSION = "1.3.1"       # build-deb.sh stamps this from the release tag
+REPO = "hyphen04/SeatSplit"
+RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
+RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
+UPDATE_CHECK_MS = 6 * 3600 * 1000
 MAIN = "seat0"          # shown as "Seat 1"
 MAX_SEATS = 8
 LIVE_MS = 2000          # how often to rescan hardware and logins in the background
@@ -35,6 +41,59 @@ GREETER_USERS = {"lightdm", "gdm", "sddm", "Debian-gdm"}
 DM_SERVICES = ["lightdm", "gdm3", "gdm", "sddm"]
 DEMO = "--demo" in sys.argv
 _demo_seats = {}        # device path -> seat, used while in demo mode
+
+
+# ============================================================ updates (GitHub Releases)
+def parse_ver(s):
+    m = re.match(r"v?(\d+)\.(\d+)\.(\d+)", s or "")
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def check_update():
+    """Ask GitHub for the latest release. Returns (version, deb_url, sha256, page) if newer, else None."""
+    req = urllib.request.Request(RELEASES_API, headers={"Accept": "application/vnd.github+json",
+                                                        "User-Agent": APP_ID + "/" + VERSION})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        rel = json.load(r)
+    new, cur = parse_ver(rel.get("tag_name")), parse_ver(VERSION)
+    if not new or not cur or new <= cur:
+        return None
+    for a in rel.get("assets", []):
+        if re.fullmatch(r"seatsplit_[\d.]+_all\.deb", a.get("name", "")):
+            digest = (a.get("digest") or "").replace("sha256:", "")
+            return ".".join(map(str, new)), a["browser_download_url"], digest, rel.get("html_url", RELEASES_PAGE)
+    return None
+
+
+def can_self_update():
+    """Only a .deb install (under /opt/seatsplit) can be upgraded in place."""
+    return (not DEMO and os.geteuid() == 0 and shutil.which("dpkg")
+            and os.path.abspath(__file__).startswith("/opt/seatsplit/"))
+
+
+def install_update(url, sha256):
+    """Download the .deb from GitHub, verify it, install it. Returns (ok, message)."""
+    tmp = tempfile.mkdtemp(prefix="seatsplit-")
+    try:
+        deb = os.path.join(tmp, os.path.basename(url))
+        req = urllib.request.Request(url, headers={"User-Agent": APP_ID + "/" + VERSION})
+        h = hashlib.sha256()
+        with urllib.request.urlopen(req, timeout=60) as r, open(deb, "wb") as f:
+            for chunk in iter(lambda: r.read(65536), b""):
+                h.update(chunk)
+                f.write(chunk)
+        if sha256 and h.hexdigest() != sha256:
+            return False, "Download is corrupted (checksum mismatch). Nothing was installed."
+        os.chmod(tmp, 0o755)
+        os.chmod(deb, 0o644)
+        tool = ["apt-get", "install", "-y", deb] if shutil.which("apt-get") else ["dpkg", "-i", deb]
+        p = subprocess.run(tool, capture_output=True, text=True,
+                           env=dict(os.environ, DEBIAN_FRONTEND="noninteractive"))
+        if p.returncode != 0:
+            return False, (p.stderr.strip().splitlines() or ["install failed"])[-1]
+        return True, "Updated."
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def seat_num(seat):
@@ -862,6 +921,66 @@ class App(Gtk.Window):
         self.show_all()
         self.refresh()
         GLib.timeout_add(LIVE_MS, self.live_tick)
+        self.upd = None
+        if not DEMO:
+            GLib.timeout_add_seconds(3, lambda: self.check_updates(False) or False)
+            GLib.timeout_add(UPDATE_CHECK_MS, lambda: self.check_updates(False) or True)
+
+    # ---------------------------------------------------- updates
+    def check_updates(self, manual):
+        """Look for a newer GitHub release. Quiet unless manual or an update exists."""
+        def work():
+            try:
+                res = check_update()
+            except Exception as e:  # noqa: BLE001
+                res = e
+            GLib.idle_add(self.on_update_checked, res, manual)
+        threading.Thread(target=work, daemon=True).start()
+
+    def on_update_checked(self, res, manual):
+        if isinstance(res, Exception):
+            if manual:
+                self.notify("Could not reach GitHub to check for updates.", True)
+        elif res:
+            self.upd = res
+            self.update_btn.set_label("⬇  Update to v" + res[0])
+            self.update_btn.set_tooltip_text("A new version of SeatSplit is available")
+            self.update_btn.show()
+            if manual:
+                self.on_update_click()
+        elif manual:
+            self.notify(f"You are on the latest version (v{VERSION}).")
+        return False
+
+    def on_update_click(self):
+        if not self.upd:
+            return
+        ver, url, sha, page = self.upd
+        if not can_self_update():
+            if self.confirm(f"SeatSplit v{ver} is available",
+                            f"This copy was not installed from the .deb package, so it cannot update itself.\n"
+                            f"Open the download page?"):
+                Gtk.show_uri_on_window(self, page, Gdk.CURRENT_TIME)
+            return
+        if not self.confirm(f"Update SeatSplit to v{ver}?",
+                            f"You are on v{VERSION}. The new package is downloaded from GitHub, "
+                            f"checked, installed, and SeatSplit restarts. Your seats are not changed."):
+            return
+        self.notify("Downloading update...")
+        self.update_btn.set_sensitive(False)
+
+        def done(r):
+            self.update_btn.set_sensitive(True)
+            ok, msg = (False, str(r)) if isinstance(r, Exception) else r
+            if not ok:
+                self.error("Update failed", msg)
+                return
+            self.notify(f"Updated to v{ver}. Restarting...")
+            GLib.timeout_add(1200, self.restart)
+        self.bg(lambda: install_update(url, sha), done)
+
+    def restart(self):
+        os.execv(sys.executable, [sys.executable, os.path.abspath(__file__)] + sys.argv[1:])
 
     # ---------------------------------------------------- theme
     def apply_theme(self):
@@ -895,6 +1014,7 @@ class App(Gtk.Window):
         entries = [("Fix blank login screen (lightdm)", self.tool_greeter),
                    ("Restart login screen", self.tool_restart_dm),
                    None,
+                   ("Check for updates", lambda: self.check_updates(True)),
                    ("Remove all seat assignments", self.tool_undo)]
         for e in entries:
             if e is None:
@@ -917,6 +1037,9 @@ class App(Gtk.Window):
         hb.pack_end(tools)
         hb.pack_end(self.theme_btn)
         hb.pack_end(refresh)
+        self.update_btn = button("", "suggest", lambda _b: self.on_update_click())
+        self.update_btn.set_no_show_all(True)
+        hb.pack_end(self.update_btn)
 
     def build_body(self):
         overlay = Gtk.Overlay()
