@@ -9,14 +9,14 @@
 # The .deb is written to the repo root.
 #
 # Install the result with:
-#   sudo apt install ./seatsplit_1.3.1_all.deb
+#   sudo apt install ./seatsplit_1.3.2_all.deb
 set -e
 
 # Resolve repo root (one level above this script)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-VER="${1:-1.3.1}"
+VER="${1:-1.3.2}"
 TMP="$(mktemp -d)"
 PKG="$TMP/seatsplit_${VER}_all"
 
@@ -53,7 +53,7 @@ Version: $VER
 Section: utils
 Priority: optional
 Architecture: all
-Depends: python3, python3-gi, python3-gi-cairo, gir1.2-gtk-3.0, policykit-1, systemd, udev
+Depends: python3, python3-gi, python3-gi-cairo, gir1.2-gtk-3.0, pkexec | policykit-1, systemd, udev
 Replaces: multiseat-manager
 Conflicts: multiseat-manager
 Maintainer: Kunj Patel <kunj2604@gmail.com>

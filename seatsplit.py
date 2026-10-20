@@ -29,7 +29,7 @@ APP_ID = "seatsplit"
 AUTHOR = "Kunj Patel"
 WEBSITE = "https://www.kunj.dev/"
 GITHUB = "https://github.com/hyphen04"
-VERSION = "1.3.1"       # build-deb.sh stamps this from the release tag
+VERSION = "1.3.2"       # build-deb.sh stamps this from the release tag
 REPO = "hyphen04/SeatSplit"
 RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
@@ -111,14 +111,19 @@ def norm_seat(s):
 # ============================================================ backend
 def sh(*cmd):
     try:
-        return subprocess.run(cmd, capture_output=True, text=True).stdout
-    except FileNotFoundError:
+        return subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=20).stdout
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         return ""
 
 
-def run(*cmd):
+def run(*cmd, timeout=None):
+    # never wait on a terminal prompt (apt, needrestart...) and never hang forever when a timeout is given
+    env = dict(os.environ, DEBIAN_FRONTEND="noninteractive", NEEDRESTART_MODE="a")
     try:
-        return subprocess.run(cmd, capture_output=True, text=True).returncode
+        return subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                              env=env, timeout=timeout).returncode
+    except subprocess.TimeoutExpired:
+        return 124
     except FileNotFoundError:
         return 127
 
@@ -493,8 +498,11 @@ def fix_greeter():
     dm = detect_dm()
     if dm != "lightdm":
         return False, f"Your login manager is {dm or 'unknown'}. This fix is only needed for lightdm."
-    if run("apt-get", "install", "-y", "lightdm-gtk-greeter") != 0:
-        return False, "Could not install lightdm-gtk-greeter."
+    rc = run("apt-get", "install", "-y", "lightdm-gtk-greeter", timeout=300)
+    if rc == 124:
+        return False, "Installing lightdm-gtk-greeter timed out. Check your internet connection and that no other package manager is running."
+    if rc != 0:
+        return False, "Could not install lightdm-gtk-greeter (is another package manager running?)."
     os.makedirs("/etc/lightdm/lightdm.conf.d", exist_ok=True)
     with open("/etc/lightdm/lightdm.conf.d/60-extra-seats-greeter.conf", "w") as f:  # seat0 is left alone
         f.write("".join(f"[Seat:seat{n}]\ngreeter-session=lightdm-gtk-greeter\n\n" for n in range(1, MAX_SEATS)))
@@ -907,6 +915,7 @@ class App(Gtk.Window):
         self.seats, self.extra, self.cols = [MAIN, "seat1"], set(), {}
         self._toast_id = 0
         self._sig, self._dragging, self._live_busy = None, False, False
+        self._busy_label = "something"
 
         self.cfg = load_cfg()
         theme = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--theme=")), None)
@@ -1168,12 +1177,12 @@ class App(Gtk.Window):
         d.run()
         d.destroy()
 
-    def bg(self, work, done):
+    def bg(self, work, done, label="something"):
         """Run work() off the UI thread, then done(result) on it."""
         if self.busy:
-            self.notify("Please wait, something is still running.", True)
+            self.notify(f"Please wait, {self._busy_label} is still running.", True)
             return False
-        self.busy = True
+        self.busy, self._busy_label = True, label
 
         def runner():
             try:
@@ -1192,7 +1201,7 @@ class App(Gtk.Window):
     # ---------------------------------------------------- data + render
     def refresh(self):
         self.det_stop()
-        self.bg(scan_all, self.on_scan)
+        self.bg(scan_all, self.on_scan, "the hardware scan")
 
     def on_scan(self, res):
         if isinstance(res, Exception):
@@ -1582,7 +1591,8 @@ class App(Gtk.Window):
                 self.notify(f"Failed: {r}", True)
             else:
                 self.notify(r[1], not r[0])
-        self.bg(fix_greeter, done)
+        if self.bg(fix_greeter, done, "the login screen fix"):
+            self.notify("Fixing the login screen... this can take a minute.")
 
 
 # ============================================================ entry

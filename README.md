@@ -44,8 +44,9 @@ under the hood — SeatSplit gives you a friendly drag-and-drop UI on top of it.
 SeatSplit uses **GTK 3 via PyGObject** (`python3-gi`). This library is a
 **system package** — it cannot be installed with `pip`.
 
-> [!IMPORTANT]
-> Install the system packages below before any other step.
+> [!NOTE]
+> **Using the `.deb` (Option A)? Skip this section.** `apt` installs all of these
+> automatically. They are only needed for the install script or running from source.
 
 ### Debian / Ubuntu / Linux Mint
 
@@ -77,7 +78,7 @@ standard on any systemd-based distro.
 Download the latest `.deb` from the [Releases](../../releases) page and install:
 
 ```bash
-sudo apt install ./seatsplit_1.3.1_all.deb
+sudo apt install ./seatsplit_1.3.2_all.deb
 ```
 
 ### Option B — Install script  *(from source)*
