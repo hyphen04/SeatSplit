@@ -10,14 +10,14 @@ Needs only python3-gi (GTK 3) and polkit (pkexec) - both are on most desktops:
 Options:  --demo          fake hardware, nothing is changed (for trying the UI)
           --theme=dark    start in dark or light theme
 """
-import glob, hashlib, json, os, pwd, re, shutil, struct, subprocess, sys, tempfile, threading, time
+import glob, hashlib, json, os, pwd, re, shlex, shutil, struct, subprocess, sys, tempfile, threading, time
 import urllib.request
 from collections import defaultdict
 from string import Template
 
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, Gdk, GLib, Pango  # noqa: E402
+from gi.repository import Gtk, Gdk, Gio, GLib, Pango  # noqa: E402
 
 try:
     import cairo  # only used for a nicer drag preview
@@ -29,7 +29,7 @@ APP_ID = "seatsplit"
 AUTHOR = "Kunj Patel"
 WEBSITE = "https://www.kunj.dev/"
 GITHUB = "https://github.com/hyphen04"
-VERSION = "1.3.9"       # build-deb.sh stamps this from the release tag
+VERSION = "1.3.10"       # build-deb.sh stamps this from the release tag
 REPO = "hyphen04/SeatSplit"
 RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
@@ -604,8 +604,41 @@ def session_env(uid):
     return want
 
 
-def open_url(url):
-    """Open a link in the logged-in user's browser (this app runs as root, which can't)."""
+def list_browsers():
+    """[(desktop id, name, argv template)] for installed web browsers."""
+    out, seen = [], set()
+    for a in Gio.AppInfo.get_all_for_type("x-scheme-handler/https"):
+        try:
+            argv = shlex.split(a.get_commandline() or "")
+        except ValueError:
+            continue
+        if a.get_id() in seen or not argv:
+            continue
+        seen.add(a.get_id())
+        out.append((a.get_id(), a.get_display_name(), argv))
+    return sorted(out, key=lambda b: b[1].lower())
+
+
+def browser_argv(argv, url):
+    """Fill the %u / %U / %f placeholders of a .desktop command line with the url."""
+    out, used = [], False
+    for a in argv:
+        if a in ("%u", "%U", "%f", "%F"):
+            out.append(url)
+            used = True
+        elif re.fullmatch(r"%[a-zA-Z]", a):
+            continue
+        else:
+            out.append(a)
+    return out if used else out + [url]
+
+
+def open_url(url, argv=None):
+    """Open a link in the logged-in user's browser (this app runs as root, which can't).
+
+    argv: a specific browser command (with the url already filled in); default is xdg-open.
+    """
+    argv = argv or ["xdg-open", url]
     u = real_user()
     root = u and os.geteuid() == 0
     if root:
@@ -620,9 +653,9 @@ def open_url(url):
                 env[k] = os.environ[k]
         for k, v in session_env(u.pw_uid).items():   # fills in anything pkexec stripped
             env.setdefault(k, v)
-        cmd = ["runuser", "-u", u.pw_name, "--", "env", "-i"] + [f"{k}={v}" for k, v in env.items()] + ["xdg-open", url]
+        cmd = ["runuser", "-u", u.pw_name, "--", "env", "-i"] + [f"{k}={v}" for k, v in env.items()] + argv
     else:
-        cmd = ["xdg-open", url]
+        cmd = argv
     try:
         log = open("/tmp/seatsplit-open.log", "w")  # kept for troubleshooting
         subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=log, stderr=log, cwd=u.pw_dir if root else None)
@@ -1032,7 +1065,7 @@ class App(Gtk.Window):
             if self.confirm(f"SeatSplit v{ver} is available",
                             f"This copy was not installed from the .deb package, so it cannot update itself.\n"
                             f"Open the download page?"):
-                open_url(page)
+                self.open_link(page)
             return
         if not self.confirm(f"Update SeatSplit to v{ver}?",
                             f"You are on v{VERSION}. The new package is downloaded from GitHub, "
@@ -1092,6 +1125,59 @@ class App(Gtk.Window):
             return False
         threading.Thread(target=work, daemon=True).start()
 
+    # ---------------------------------------------------- open links
+    def open_link(self, url):
+        """Open url with the remembered browser, or ask which one to use."""
+        pref = self.cfg.get("browser")        # None = ask, "" = system default, else a desktop id
+        if pref is None:
+            self.choose_browser(url)
+        else:
+            self.launch(url, pref)
+        return True
+
+    def launch(self, url, pref):
+        argv = next((browser_argv(b[2], url) for b in list_browsers() if b[0] == pref), None) if pref else None
+        if not open_url(url, argv):
+            self.notify("Could not open the link: " + url, True)
+
+    def choose_browser(self, url):
+        """'Open with' dialog. url=None just changes the remembered choice."""
+        browsers = list_browsers()
+        d = Gtk.Dialog(title="Open with", transient_for=self, modal=True)
+        d.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        d.add_button("Open" if url else "Save", Gtk.ResponseType.OK)
+        d.set_default_response(Gtk.ResponseType.OK)
+        area = d.get_content_area()
+        margins(area, 18)
+        area.set_spacing(8)
+        area.pack_start(lbl(url or "Which web browser should links open in?", "hint", wrap=True), False, False, 0)
+        group, radios = None, []
+        for pref, name in [("", "System default")] + [(b[0], b[1]) for b in browsers]:
+            r = Gtk.RadioButton.new_with_label_from_widget(group, name)
+            group = group or r
+            radios.append((pref, r))
+            area.pack_start(r, False, False, 0)
+            if pref == self.cfg.get("browser"):
+                r.set_active(True)
+        remember = Gtk.CheckButton(label="Remember my choice")
+        remember.set_active(url is None or self.cfg.get("browser") is not None)
+        if url is None:
+            remember.set_no_show_all(True)
+        else:
+            area.pack_start(remember, False, False, 4)
+        d.show_all()
+        resp = d.run()
+        pref = next((p for p, r in radios if r.get_active()), "")
+        keep = remember.get_active() or url is None
+        d.destroy()
+        if resp != Gtk.ResponseType.OK:
+            return
+        if keep:
+            self.cfg["browser"] = pref
+            save_cfg(self.cfg)
+        if url:
+            self.launch(url, pref)
+
     def restart(self):
         os.execv(sys.executable, [sys.executable, os.path.abspath(__file__)] + sys.argv[1:])
 
@@ -1128,6 +1214,7 @@ class App(Gtk.Window):
                    ("Restart login screen", self.tool_restart_dm),
                    None,
                    ("Check for updates", lambda: self.check_updates(True)),
+                   ("Choose web browser for links", lambda: self.choose_browser(None)),
                    ("Remove all seat assignments", self.tool_undo)]
         for e in entries:
             if e is None:
@@ -1203,7 +1290,7 @@ class App(Gtk.Window):
             link = Gtk.LinkButton.new_with_label(url, text)
             link.set_relief(Gtk.ReliefStyle.NONE)
             link.set_tooltip_text(url)
-            link.connect("activate-link", lambda _w, u=url: open_url(u) or False)
+            link.connect("activate-link", lambda _w, u=url: self.open_link(u) or True)
             link.get_style_context().add_class("footer-link")
             foot.pack_start(link, False, False, 0)
         main.pack_end(foot, False, False, 0)

@@ -9,14 +9,14 @@
 # The .deb is written to the repo root.
 #
 # Install the result with:
-#   sudo apt install ./seatsplit_1.3.9_all.deb
+#   sudo apt install ./seatsplit_1.3.10_all.deb
 set -e
 
 # Resolve repo root (one level above this script)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-VER="${1:-1.3.9}"
+VER="${1:-1.3.10}"
 TMP="$(mktemp -d)"
 PKG="$TMP/seatsplit_${VER}_all"
 
