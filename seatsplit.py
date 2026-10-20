@@ -29,7 +29,7 @@ APP_ID = "seatsplit"
 AUTHOR = "Kunj Patel"
 WEBSITE = "https://www.kunj.dev/"
 GITHUB = "https://github.com/hyphen04"
-VERSION = "1.3.3"       # build-deb.sh stamps this from the release tag
+VERSION = "1.3.4"       # build-deb.sh stamps this from the release tag
 REPO = "hyphen04/SeatSplit"
 RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
@@ -1151,7 +1151,7 @@ class App(Gtk.Window):
         # credits footer
         foot = hbox(4)
         foot.set_halign(Gtk.Align.CENTER)
-        foot.pack_start(lbl("Made by " + AUTHOR + "  ·", "footer"), False, False, 0)
+        foot.pack_start(lbl(f"v{VERSION}  ·  Made by {AUTHOR}  ·", "footer"), False, False, 0)
         for text, url in (("Website", WEBSITE), ("GitHub", GITHUB)):
             link = Gtk.LinkButton.new_with_label(url, text)
             link.set_relief(Gtk.ReliefStyle.NONE)
