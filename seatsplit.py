@@ -29,7 +29,7 @@ APP_ID = "seatsplit"
 AUTHOR = "Kunj Patel"
 WEBSITE = "https://www.kunj.dev/"
 GITHUB = "https://github.com/hyphen04"
-VERSION = "1.3.6"       # build-deb.sh stamps this from the release tag
+VERSION = "1.3.7"       # build-deb.sh stamps this from the release tag
 REPO = "hyphen04/SeatSplit"
 RELEASES_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases/latest"
@@ -590,12 +590,15 @@ def open_url(url):
     env = ["env"] + [f"{k}={os.environ[k]}" for k in ("DISPLAY", "XAUTHORITY", "WAYLAND_DISPLAY") if k in os.environ]
     if u and os.geteuid() == 0:
         rt = f"/run/user/{u.pw_uid}"
+        # pkexec leaves HOME=/root; a browser started with that cannot open the user's profile
         cmd = (["runuser", "-u", u.pw_name, "--"] + env +
-               [f"XDG_RUNTIME_DIR={rt}", f"DBUS_SESSION_BUS_ADDRESS=unix:path={rt}/bus", "xdg-open", url])
+               [f"HOME={u.pw_dir}", f"USER={u.pw_name}", f"LOGNAME={u.pw_name}",
+                f"XDG_RUNTIME_DIR={rt}", f"DBUS_SESSION_BUS_ADDRESS=unix:path={rt}/bus", "xdg-open", url])
     else:
         cmd = ["xdg-open", url]
     try:
-        subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         cwd=u.pw_dir if u and os.geteuid() == 0 else None)
         return True
     except OSError:
         return False
